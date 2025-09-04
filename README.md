@@ -1,13 +1,33 @@
-# Sequencing-pipeline
+# Sequencing Pipeline
 
-#this is the full sequencing analysis pipeline that I use when I do analysis
-#the first step is going to be demultiplexing
- nanopore@Barbara:/ssd/p2/BC01/BC01P3$ ~/dorado-1.0.0-linux-x64/bin/dorado basecaller -rv--min-qscore 10 --barcode-arrangement /ssd/M13-pl27f.toml --barcode-sequences /ssd/pl27f. fasta -kit-name PL27f sup@v5.2. >dorado.5.2.bam
-#then we want to store the demux into fastq files
-(base) nanopore@Barbara;/ssd/p2/BC01/BC01P3$ /home/nanopore/dorado-1.0.0-linux-x64/bin/dorado demux --emit-fastq --output-dir demux--no-classify dorado.5,2,bam 
-#we might have more than one sequencing runs, so I would need to concatenate the data: 
+This repository documents the full sequencing analysis pipeline I use for my analyses.  
+Each code block includes its own header and description so it’s self-contained.
+
+---
+
+```bash
+## 1. Demultiplexing (Basecalling)
+# Performs basecalling and demultiplexing from raw reads into a BAM file.
+
+~/dorado-1.0.0-linux-x64/bin/dorado basecaller \
+    -rv --min-qscore 10 \
+    --barcode-arrangement /ssd/M13-pl27f.toml \
+    --barcode-sequences /ssd/pl27f.fasta \
+    -kit name PL27f sup@v5.2. \
+    > dorado.5.2.bam
+
+## 2. Store Demultiplexed Reads into FASTQ Files
+# Converts the BAM file into FASTQ files, one per barcode.
+
+/home/nanopore/dorado-1.0.0-linux-x64/bin/dorado demux \
+    --emit-fastq \
+    --output-dir demux \
+    --no-classify dorado.5.2.bam
+
+## 3. Concatenate Multiple Runs
+# Combines all FASTQ files from multiple sequencing runs into one per barcode.
+
 #!/bin/bash
-
 indir="/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/data_sequences/demux"
 outdir="/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/data_sequences/concatenated_seqs"
 
@@ -15,11 +35,129 @@ mkdir -p "$outdir"
 
 for bc in $(ls "$indir"/*barcode* | sed -E 's/.*(barcode[0-9]+)/\1/' | sort -u); do
     echo "Processing $bc ..."
-    
-    # Concatenate all files for this barcode
-    # Remove extra .fastq if present in output filename
     outfile="$outdir/${bc}.fastq"
-    
     cat "$indir"/*${bc}*.fastq* > "$outfile"
 done
+
+## 4. Rename Files by Barcode
+# Removes extra text from filenames so they only contain the barcode identifier.
+
+for f in *_barcode*.fastq; do
+    newname=$(echo "$f" | sed -E 's/.*(barcode[0-9]+\.fastq)/\1/')
+    mv "$f" "$newname"
+done
+
+
+## 5. Remove Unwanted Barcodes
+# Deletes FASTQ files for barcodes that should not be included.
+
+rm barcode0{70..95}.fastq
+
+
+## 6. Generate Sample List
+# Creates a text file listing all sample names (without `.fastq.gz`).
+
+ls *.fastq.gz | sed 's/\.fastq\.gz$//' > sample_names.txt
+
+
+## 7. Primer Removal with Cutadapt
+# Trims primers from reads using cutadapt.
+
+#!/bin/sh
+#SBATCH --mail-user=zeddy21@mail.mcgill.ca
+#SBATCH --mail-type=ALL
+#SBATCH --job-name=cutadapt
+#SBATCH --output=%x-%j.out
+#SBATCH --time=0:30:00
+#SBATCH --mem=5G
+#SBATCH --array=1-64
+#SBATCH --account=def-krocke
+
+output_folder=/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/trimmed_sequences
+input_folder=/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/data_sequences/concatenated_seqs
+
+cd $input_folder
+SAMPLE=( $(cat sample_names.txt | awk -v SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID} 'NR==SLURM_ARRAY_TASK_ID') )
+
+cutadapt -g NNNNNNNNAGRGTTYGATYMTGGCTCAG -a AAGTCGTAACAAGGTACCGCCATAAGAAGAAT  --revcomp  -o $output_folder/${SAMPLE}_trimmed_reads.fastq $input_folder/${SAMPLE}.fastq
+
+
+## 8. Length Filtering with Seqkit
+# Filters reads by length (1300–1700 bp).
+
+#!/bin/sh
+#SBATCH --mail-user=zeddy21@mail.mcgill.ca
+#SBATCH --mail-type=ALL
+#SBATCH --job-name=seqkit
+#SBATCH --output=%x-%j.out
+#SBATCH --time=0:30:00
+#SBATCH --mem=10G
+#SBATCH --array=1-64
+#SBATCH --account=def-krocke
+
+output_folder=/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/filtered_reads
+input_folder=/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/trimmed_sequences
+
+cd /home/zeddy21/projects/def-krocke/zeddy21/sequencing3/data_sequences/concatenated_seqs
+SAMPLE=( $(cat sample_names.txt | awk -v SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID} 'NR==SLURM_ARRAY_TASK_ID') )
+
+seqkit seq -m 1300 -M 1700 $input_folder/${SAMPLE}_trimmed_reads.fastq  > $output_folder/${SAMPLE}_trimmed_reads_filtered.fastq.gz
+
+
+## 9. Taxonomic Assignment with Emu
+# Assigns taxonomy to reads using Emu.
+
+#!/bin/sh
+#SBATCH --mail-user=zeddy21@mail.mcgill.ca
+#SBATCH --mail-type=ALL
+#SBATCH --job-name=emu
+#SBATCH --output=%x-%j.out
+#SBATCH --time=2:30:00
+#SBATCH --mem=120G
+#SBATCH --cpus-per-task=12
+#SBATCH --tasks=4
+#SBATCH --array=1-64
+#SBATCH --account=def-krocke
+
+cd /home/zeddy21/projects/def-krocke/zeddy21/sequencing3/data_sequences/concatenated_seqs
+SAMPLE=( $(cat sample_names.txt | awk -v SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID} 'NR==SLURM_ARRAY_TASK_ID') )
+
+module load StdEnv/2023
+module load python/3.10.13
+module load minimap2
+
+cd /home/zeddy21/projects/def-krocke/zeddy21/programs_installed/emu/
+source ENV_emu/bin/activate
+export EMU_DATABASE_DIR=/home/zeddy21/projects/def-krocke/zeddy21/programs_installed/emu/emu-3.5.1/emu_database
+
+output_dir=/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/emu
+reads=/home/zeddy21/projects/def-krocke/zeddy21/sequencing3/filtered_reads
+
+cd /home/zeddy21/projects/def-krocke/zeddy21/programs_installed/emu/emu-3.5.1
+python3 emu abundance --output-dir $output_dir/emu-out/$SAMPLE --threads 4 --keep-counts $reads/${SAMPLE}_trimmed_reads_filtered.fastq.gz
+
+
+## 10. Combine Emu Outputs
+# Collects and merges all Emu output tables into a single file.
+
+# Copy all .tsv outputs into one folder
+mkdir all_outputs
+find /home/zeddy21/projects/def-krocke/zeddy21/sequencing3/emu/emu-out -type f -name "*.tsv" -exec cp {} /home/zeddy21/projects/def-krocke/zeddy21/sequencing3/emu/all_outputs \;
+
+# Load modules
+module load StdEnv/2023
+module load python/3.10.13
+module load minimap2
+
+# Activate environment
+cd /home/zeddy21/projects/def-krocke/zeddy21/programs_installed/emu/
+source ENV_emu/bin/activate
+
+# Combine outputs
+cd /home/zeddy21/projects/def-krocke/zeddy21/programs_installed/emu/emu-3.5.1
+python3 emu combine-outputs /home/zeddy21/projects/def-krocke/zeddy21/sequencing3/emu/all_outputs  "tax_id" --counts
+
+
+## 11. Downstream Analysis
+# All downstream statistical analysis and visualization are performed in R.
 

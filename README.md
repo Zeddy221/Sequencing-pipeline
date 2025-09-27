@@ -57,7 +57,7 @@ rm barcode0{70..95}.fastq
 ## 6. Generate Sample List
 # Creates a text file listing all sample names (without `.fastq.gz`).
 
-ls *.fastq | sed 's/\.fastq\.gz$//' > sample_names.txt
+ls *.fastq | sed 's/\.fastq$//' > sample_names.txt
 
 
 ## 7. Primer Removal with Cutadapt

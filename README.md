@@ -9,7 +9,7 @@ Each code block includes its own header and description so it’s self-contained
 ## 1. Demultiplexing (Basecalling)
 # Performs basecalling and demultiplexing from raw reads into a BAM file.
 
-~/dorado-1.0.0-linux-x64/bin/dorado basecaller \
+~/dorado-1.2.0-linux-x64/bin/dorado basecaller \
     -rv --min-qscore 10 \
     --barcode-arrangement /ssd/M13-pl27f.toml \
     --barcode-sequences /ssd/pl27f.fasta \

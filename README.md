@@ -6,6 +6,7 @@ Each code block includes its own header and description so it’s self-contained
 ---
 
 ```bash
+#this is what I do when I am at the big computer
 ## 1. Demultiplexing (Basecalling)
 # Performs basecalling and demultiplexing from raw reads into a BAM file.
 

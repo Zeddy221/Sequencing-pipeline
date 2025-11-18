@@ -14,7 +14,7 @@ Each code block includes its own header and description so it’s self-contained
     -rv --min-qscore 10 \
     --barcode-arrangement /ssd/M13-pl27f.toml \
     --barcode-sequences /ssd/pl27f.fasta \
-    -kit name PL27f sup@v5.2. \
+    --kit-name PL27f sup@v5.2. \
     > dorado.5.2.bam
 
 ## 2. Store Demultiplexed Reads into FASTQ Files

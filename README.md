@@ -24,6 +24,7 @@ Each code block includes its own header and description so it’s self-contained
     --output-dir demux \
     --no-classify dorado.5.2.bam
 
+
 ## 3. Concatenate Multiple Runs
 # Combines all FASTQ files from multiple sequencing runs into one per barcode.
 
@@ -46,6 +47,82 @@ for f in *_barcode*.fastq; do
     newname=$(echo "$f" | sed -E 's/.*(barcode[0-9]+\.fastq)/\1/')
     mv "$f" "$newname"
 done
+
+#in the case that I can't use patricks computer I can also use compute canada
+#demultiplexing
+#!/bin/bash
+#SBATCH --mail-user=ezrah.roy@mail.mcgill.ca
+#SBATCH --mail-type=ALL
+#SBATCH --job-name=dorado_demux
+#SBATCH --time=2:30:00
+#SBATCH --mem=32G
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --account=def-krocke
+#SBATCH --output=demux5_2.out
+#SBATCH --error=demux5_2.err
+
+#since the previous run made results but weird ones, I switched the kit name position to be closer to the end 
+set -x
+module load cuda/12.2
+
+DORADO_HOME=/home/zeddy21/projects/def-krocke/zeddy21/programs_installed/dorado/dorado-1.2.0-linux-x64
+MODEL_DIR=/home/zeddy21/projects/def-krocke/zeddy21/programs_installed/dorado/models/dna_r10.4.1_e8.2_400bps_sup@v5.2.0
+
+INPUT_DIR=/home/zeddy21/projects/def-krocke/zeddy21/sequencing5/raw_reads5
+OUTPUT_DIR=/home/zeddy21/projects/def-krocke/zeddy21/sequencing5/demux5_2
+
+BARCODE_TOML=$DORADO_HOME/M13-pl27f.toml
+BARCODE_FASTA=$DORADO_HOME/pl27f.removed.fasta
+
+mkdir -p "$OUTPUT_DIR"
+
+echo "=== Starting Basecalling ==="
+
+$DORADO_HOME/bin/dorado basecaller \
+    --recursive \
+    --min-qscore 10 \
+    --barcode-arrangement $BARCODE_TOML \
+    --barcode-sequences $BARCODE_FASTA \
+    --kit-name PL27f \
+    $MODEL_DIR \
+    $INPUT_DIR \
+    > $OUTPUT_DIR/dorado.5.2.bam
+
+echo "=== Basecalling Done ==="
+
+echo "=== Starting Demultiplexing ==="
+
+$DORADO_HOME/bin/dorado demux \
+    --emit-fastq \
+    --barcode-arrangement $BARCODE_TOML \
+    --barcode-sequences $BARCODE_FASTA \
+    --kit-name PL27f \
+    --output-dir "$OUTPUT_DIR/fastq" \
+    "$OUTPUT_DIR/dorado.5.2.bam"
+
+echo "=== Demuxing Done ==="
+
+
+#then you need to concatenate the files if they come from different runs and you demuxed on compute can
+#if you did not demux on cmpute can use the previous code
+#so you will need to be in the BC01P... folder to do that
+mkdir merged_fastq
+# Loop through barcodes 001 to 096
+for i in {001..096}; do
+    # Define the barcode name (e.g., barcode001)
+    bc="barcode$i"
+    
+    # Check if any files exist for this barcode across the directories to avoid errors
+    if ls */fastq_pass/$bc/*.fastq >/dev/null 2>&1; then
+        echo "Merging $bc..."
+        
+        # The wildcard (*) matches all the date folders (20251108..., 20251109...)
+        cat */fastq_pass/$bc/*.fastq > merged_fastq/${bc}.fastq
+    fi
+done
+
+echo "Done! Files are in the merged_fastq folder."
 
 
 ## 5. Remove Unwanted Barcodes

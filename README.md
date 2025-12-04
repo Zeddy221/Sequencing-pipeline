@@ -62,7 +62,6 @@ done
 #SBATCH --output=demux5_all.out
 #SBATCH --error=demux5_all.err
 
-#since the previous run made results but weird ones, I switched the kit name position to be closer to the end 
 set -x
 module load cuda/12.2
 

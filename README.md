@@ -59,8 +59,8 @@ done
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --account=def-krocke
-#SBATCH --output=demux5_2.out
-#SBATCH --error=demux5_2.err
+#SBATCH --output=demux5_all.out
+#SBATCH --error=demux5_all.err
 
 #since the previous run made results but weird ones, I switched the kit name position to be closer to the end 
 set -x
@@ -69,40 +69,25 @@ module load cuda/12.2
 DORADO_HOME=/home/zeddy21/projects/def-krocke/zeddy21/programs_installed/dorado/dorado-1.2.0-linux-x64
 MODEL_DIR=/home/zeddy21/projects/def-krocke/zeddy21/programs_installed/dorado/models/dna_r10.4.1_e8.2_400bps_sup@v5.2.0
 
-INPUT_DIR=/home/zeddy21/projects/def-krocke/zeddy21/sequencing5/raw_reads5
-OUTPUT_DIR=/home/zeddy21/projects/def-krocke/zeddy21/sequencing5/demux5_2
+INPUT_DIR=/home/zeddy21/projects/def-krocke/zeddy21/sequencing5/raw_reads5_2
+OUTPUT_DIR=/home/zeddy21/projects/def-krocke/zeddy21/sequencing5/demux/demux5_all
 
 BARCODE_TOML=$DORADO_HOME/M13-pl27f.toml
 BARCODE_FASTA=$DORADO_HOME/pl27f.removed.fasta
 
 mkdir -p "$OUTPUT_DIR"
-
-echo "=== Starting Basecalling ==="
-
 $DORADO_HOME/bin/dorado basecaller \
+    -v \
     --recursive \
     --min-qscore 10 \
+    --kit-name PL27f \
     --barcode-arrangement $BARCODE_TOML \
     --barcode-sequences $BARCODE_FASTA \
-    --kit-name PL27f \
+    --emit-fastq \
     $MODEL_DIR \
     $INPUT_DIR \
-    > $OUTPUT_DIR/dorado.5.2.bam
-
+    --output-dir $OUTPUT_DIR
 echo "=== Basecalling Done ==="
-
-echo "=== Starting Demultiplexing ==="
-
-$DORADO_HOME/bin/dorado demux \
-    --emit-fastq \
-    --barcode-arrangement $BARCODE_TOML \
-    --barcode-sequences $BARCODE_FASTA \
-    --kit-name PL27f \
-    --output-dir "$OUTPUT_DIR/fastq" \
-    "$OUTPUT_DIR/dorado.5.2.bam"
-
-echo "=== Demuxing Done ==="
-
 
 #then you need to concatenate the files if they come from different runs and you demuxed on compute can
 #if you did not demux on cmpute can use the previous code

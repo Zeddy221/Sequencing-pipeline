@@ -120,6 +120,9 @@ rm barcode0{70..95}.fastq
 
 ls *.fastq | sed 's/\.fastq$//' > sample_names.txt
 
+#or this if the files has a diff extension
+ls *.fastq.gz | sed 's/\.fastq\.gz$//' > sample_names.txt
+
 
 ## 7. Primer Removal with Cutadapt
 # Trims primers from reads using cutadapt.

@@ -107,6 +107,22 @@ for i in {001..096}; do
 done
 
 echo "Done! Files are in the merged_fastq folder."
+#if the samples are not named barcode and have weird stuff before:
+#!/bin/bash
+
+mkdir -p "$OUTPUT_DIR"
+
+for i in {001..096}; do
+    bc="barcode$i"
+
+    if ls "$INPUT_DIR"/*"$bc"*.fastq >/dev/null 2>&1; then
+        echo "Merging $bc..."
+
+        cat "$INPUT_DIR"/*"$bc"*.fastq > "$OUTPUT_DIR"/"${bc}.fastq"
+    fi
+done
+
+echo "Done! Files are in $OUTPUT_DIR"
 
 
 ## 5. Remove Unwanted Barcodes
